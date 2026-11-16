@@ -129,8 +129,16 @@ document.getElementById('play').addEventListener('click', () => {
   rendererCanvas().requestPointerLock();
   startRound(rounds, everyone);
 });
-// screenshot/automation hook: ?shot=... starts the game headlessly without pointer lock
-if (new URLSearchParams(location.search).has('shot')) begin();
+// screenshot/automation hook: ?shot=... starts the game headlessly without pointer lock,
+// ?shot=play&yaw=<rad>&pitch=<rad>&pos=x,z aims the camera for a reproducible capture
+if (new URLSearchParams(location.search).has('shot')) {
+  const q = new URLSearchParams(location.search);
+  const yaw = parseFloat(q.get('yaw')); if (!Number.isNaN(yaw)) player.yaw = yaw;
+  const pitch = parseFloat(q.get('pitch')); if (!Number.isNaN(pitch)) player.pitch = pitch;
+  const pos = q.get('pos');
+  if (pos) { const [x, z] = pos.split(',').map(Number); if (!Number.isNaN(x) && !Number.isNaN(z)) { player.pos.x = x; player.pos.z = z; } }
+  begin();
+}
 
 document.addEventListener('keydown', (e) => {
   if (e.code === 'KeyR') startReload(weapon);
