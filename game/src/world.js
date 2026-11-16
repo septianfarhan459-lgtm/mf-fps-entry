@@ -1,74 +1,85 @@
-// The map: a closed grey room with cover, built from boxes. Every box is a collider for the
-// player and a surface a bullet stops on. Plain geometry only, no models and no textures.
+// world.js: the FOUNDRY map - an original industrial yard with a mid lane,
+// two side lanes, bombsites A/B and box colliders exported as AABBs.
 import * as THREE from 'three';
-import { PALETTE } from './palette.js';
 
-export function createWorld(scene) {
-  const group = new THREE.Group();
-  scene.add(group);
+export const TEAM_BLUE = 0, TEAM_ORANGE = 1;
 
-  const materials = {};
-  for (const name of Object.keys(PALETTE)) {
-    materials[name] = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(PALETTE[name]),
-      roughness: name === 'accent' || name === 'ink' ? 0.55 : 0.92,
-      metalness: 0.03,
-    });
-  }
-
-  const colliders = [];
-  const shootables = [];
-
-  function box(width, height, depth, x, y, z, material) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), materials[material]);
-    mesh.position.set(x, y, z);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    group.add(mesh);
-    colliders.push(new THREE.Box3().setFromObject(mesh));
-    shootables.push(mesh);
-    return mesh;
-  }
-
-  // A 24 x 24 m room, 4.6 m walls, open to the sky so one directional light reaches every corner.
-  box(24.4, 0.4, 24.4, 0, -0.2, 0, 'canvas');
-  box(0.4, 4.6, 24.4, -12.2, 2.3, 0, 'surface');
-  box(0.4, 4.6, 24.4, 12.2, 2.3, 0, 'surface');
-  box(24.4, 4.6, 0.4, 0, 2.3, -12.2, 'surface');
-  box(24.4, 4.6, 0.4, 0, 2.3, 12.2, 'surface');
-
-  // Cover: two lanes split by a pillar, crates to crouch behind, a raised platform at the back.
-  box(1.2, 3.2, 1.2, 0, 1.6, -3.4, 'hairline');
-  box(3.6, 1.1, 1.2, -4.4, 0.55, -1.2, 'hairline');
-  box(1.2, 1.1, 3.6, 4.4, 0.55, -1.2, 'hairline');
-  box(1.6, 0.7, 1.6, -7.6, 0.35, -6.2, 'hairline');
-  box(1.6, 0.7, 1.6, 7.6, 0.35, -6.2, 'hairline');
-  box(2.4, 0.9, 1.2, -2.4, 0.45, 5.4, 'hairline');
-  box(2.4, 0.9, 1.2, 2.4, 0.45, 5.4, 'hairline');
-  box(6.0, 0.5, 2.4, 0, 0.25, -10.0, 'surface');
-  box(0.9, 1.6, 0.9, -10.4, 0.8, 8.4, 'hairline');
-  box(0.9, 1.6, 0.9, 10.4, 0.8, 8.4, 'hairline');
-
-  // Light: a warm key from the front right, a cool fill from behind, and a sky/ground gradient.
-  const sky = new THREE.HemisphereLight(new THREE.Color(PALETTE.surface), new THREE.Color(PALETTE.canvas), 1.1);
-  scene.add(sky);
-
-  const key = new THREE.DirectionalLight(new THREE.Color(PALETTE.ink), 2.1);
-  key.position.set(9, 14, 7);
-  key.target.position.set(0, 0, -3);
-  key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
-  key.shadow.camera.left = -16;
-  key.shadow.camera.right = 16;
-  key.shadow.camera.top = 16;
-  key.shadow.camera.bottom = -16;
-  key.shadow.camera.far = 48;
-  key.shadow.bias = -0.0006;
-  scene.add(key, key.target);
-
-  const fill = new THREE.DirectionalLight(new THREE.Color(PALETTE.muted), 0.55);
-  fill.position.set(-8, 9, 10);
-  scene.add(fill);
-
-  return { colliders, shootables, group };
+// [minX, minY, minZ, maxX, maxY, maxZ] AABBs for movement and bullets
+export const colliders = [];
+function box(x, y, z, w, h, d, color) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color }));
+  m.position.set(x, y + h / 2, z);
+  m.updateMatrixWorld();
+  colliders.push([x - w / 2, 0, z - d / 2, x + w / 2, y + h, z + d / 2]);
+  return m;
 }
+
+const STEEL = 0x5a6472, CRATE = 0x8a6a3a, WALL = 0x46505c, FLOOR = 0x2e343c, ACCENT_A = 0xc25038, ACCENT_B = 0x3f7ac2;
+
+export function buildWorld(scene) {
+  // ground
+  const ground = new THREE.Mesh(new THREE.BoxGeometry(120, 0.5, 120), new THREE.MeshLambertMaterial({ color: FLOOR }));
+  ground.position.y = -0.25;
+  scene.add(ground);
+  // perimeter walls
+  scene.add(box(0, 0, -60, 120, 8, 2, WALL));
+  scene.add(box(0, 0, 60, 120, 8, 2, WALL));
+  scene.add(box(-60, 0, 0, 2, 8, 120, WALL));
+  scene.add(box(60, 0, 0, 2, 8, 120, WALL));
+  // mid lane: long corridor with cover crates
+  scene.add(box(-10, 0, -10, 4, 3, 4, CRATE));
+  scene.add(box(10, 0, 10, 4, 3, 4, CRATE));
+  scene.add(box(0, 0, -24, 6, 2.5, 3, WALL));
+  scene.add(box(0, 0, 24, 6, 2.5, 3, WALL));
+  scene.add(box(-24, 0, 0, 3, 2.5, 6, WALL));
+  scene.add(box(24, 0, 0, 3, 2.5, 6, WALL));
+  // side lane west
+  scene.add(box(-38, 0, -30, 8, 4, 3, WALL));
+  scene.add(box(-38, 0, 30, 8, 4, 3, WALL));
+  scene.add(box(-45, 0, 0, 3, 2.5, 14, WALL));
+  scene.add(box(-30, 0, -14, 3, 2.5, 8, CRATE));
+  scene.add(box(-30, 0, 14, 3, 2.5, 8, CRATE));
+  // side lane east
+  scene.add(box(38, 0, -30, 8, 4, 3, WALL));
+  scene.add(box(38, 0, 30, 8, 4, 3, WALL));
+  scene.add(box(45, 0, 0, 3, 2.5, 14, WALL));
+  scene.add(box(30, 0, -14, 3, 2.5, 8, CRATE));
+  scene.add(box(30, 0, 14, 3, 2.5, 8, CRATE));
+  // bombsite A (west) marker floor
+  const a = new THREE.Mesh(new THREE.BoxGeometry(14, 0.2, 14), new THREE.MeshLambertMaterial({ color: ACCENT_A }));
+  a.position.set(-40, 0.1, 0); scene.add(a);
+  // bombsite B (east)
+  const b = new THREE.Mesh(new THREE.BoxGeometry(14, 0.2, 14), new THREE.MeshLambertMaterial({ color: ACCENT_B }));
+  b.position.set(40, 0.1, 0); scene.add(b);
+  // catwalks (low platforms you can jump on)
+  scene.add(box(-18, 0, -44, 20, 1.5, 6, STEEL));
+  scene.add(box(18, 0, 44, 20, 1.5, 6, STEEL));
+  // scattered cover
+  for (let i = 0; i < 12; i++) {
+    const ang = (i / 12) * Math.PI * 2, r = 15 + (i % 3) * 8;
+    scene.add(box(Math.cos(ang) * r, 0, Math.sin(ang) * r, 2.5, 1.8 + (i % 2), 2.5, CRATE));
+  }
+}
+
+export const spawns = [
+  [ [0, 0, 50], [-6, 0, 52], [6, 0, 52], [-12, 0, 50], [12, 0, 50] ],   // blue south
+  [ [0, 0, -50], [-6, 0, -52], [6, 0, -52], [-12, 0, -50], [12, 0, -50] ], // orange north
+];
+
+// waypoint graph: ring + lanes (bot patrol routes)
+export const waypoints = [
+  [0,0,-40],[0,0,-20],[0,0,0],[0,0,20],[0,0,40],
+  [-30,0,-40],[-30,0,-20],[-30,0,0],[-30,0,20],[-30,0,40],
+  [30,0,-40],[30,0,-20],[30,0,0],[30,0,20],[30,0,40],
+  [-45,0,0],[-45,0,-20],[-45,0,20],[45,0,0],[45,0,-20],[45,0,20],
+];
+export const waypointLinks = [
+  [0,1],[1,2],[2,3],[3,4],
+  [5,6],[6,7],[7,8],[8,9],
+  [10,11],[11,12],[12,13],[13,14],
+  [0,5],[1,6],[2,7],[3,8],[4,9],
+  [0,10],[1,11],[2,12],[3,13],[4,14],
+  [7,15],[15,16],[16,7],[8,17],[17,15],
+  [12,18],[18,19],[19,12],[13,20],[20,18],
+];

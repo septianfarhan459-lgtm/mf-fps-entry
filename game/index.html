@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Greybox Range: a three.js FPS starter</title>
+<title>FOUNDRY: a three.js tactical FPS</title>
 <style>
   /* Look plan: canvas, surface, hairline, ink, muted and one accent. Every colour below is one of the six. */
   :root {
@@ -61,15 +61,82 @@
   #ammo.empty #ammo-mag { color: var(--accent); }
   #ammo-reserve { font-size: 16px; letter-spacing: -0.01em; color: var(--muted); }
 
-  #score {
+  #hud-weapon { position: fixed; right: 32px; bottom: 88px; font-family: var(--font-readout); font-size: 14px; color: var(--muted); }
+
+  #vitals {
     position: fixed;
     left: 32px;
     bottom: 24px;
+    display: flex;
+    gap: 16px;
+    align-items: baseline;
+    font-family: var(--font-readout);
+  }
+  #vitals b { font-size: 28px; font-weight: 500; color: var(--ink); }
+  #hud-health.low { color: var(--accent); }
+  #vitals span { font-size: 12px; color: var(--muted); }
+  #hud-money { font-size: 18px; color: var(--accent); }
+
+  #topbar {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 14px;
+    align-items: center;
     font-family: var(--font-readout);
     font-size: 14px;
     color: var(--muted);
   }
-  #score b { color: var(--ink); font-weight: 500; }
+  #topbar b { color: var(--ink); font-weight: 500; }
+  #hud-timer { font-size: 20px; color: var(--ink); }
+  #hud-timer.buy { color: var(--accent); }
+  #score-blue { color: #6f9fd8; }
+  #score-orange { color: #d88a6f; }
+
+  #killfeed {
+    position: fixed;
+    top: 16px;
+    right: 24px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 13px;
+    color: var(--muted);
+    text-align: right;
+  }
+  #killfeed .blue { color: #6f9fd8; }
+  #killfeed .orange { color: #d88a6f; }
+
+  #buymenu {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: grid;
+    gap: 8px;
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-panel);
+    pointer-events: auto;
+  }
+  #buymenu[hidden] { display: none; }
+  #buymenu button {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    font: inherit;
+    padding: 10px 14px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-control);
+    background: var(--canvas);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  #buymenu button:disabled { opacity: .4; cursor: not-allowed; }
+  #buymenu button span { color: var(--accent); }
 
   .overlay {
     position: fixed;
@@ -150,20 +217,26 @@
 <div id="hud" aria-hidden="true">
   <div id="crosshair"><i></i><i></i><i></i><i></i></div>
   <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
+  <div id="hud-weapon">Rifle</div>
   <div id="ammo"><span id="ammo-mag">30</span><span id="ammo-reserve">/ 90</span></div>
-  <div id="score">Score <b id="score-value">0</b></div>
+  <div id="vitals"><b id="hud-health">100</b><span>HP</span><b id="hud-armor">0</b><span>AR</span><span id="hud-money">$800</span></div>
+  <div id="topbar"><b id="score-blue">0</b><span id="hud-round">ROUND 1</span><span id="hud-timer">00:10</span><b id="score-orange">0</b></div>
+  <ul id="killfeed"></ul>
+  <div id="buymenu" hidden></div>
 </div>
 
 <div id="overlay" class="overlay">
   <section class="panel" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
-    <h1 id="overlay-title">Greybox Range</h1>
-    <p id="overlay-copy">A plain room, one rifle and four targets. Click to play.</p>
+    <h1 id="overlay-title">FOUNDRY</h1>
+    <p id="overlay-copy">Round-based tactical shooter. Blue vs Orange bots, buy weapons between rounds, hold the lanes. First to 8 rounds wins. Click to play.</p>
     <button id="play" type="button">Click to play</button>
     <ul class="keys">
       <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</li>
       <li><kbd>Mouse</kbd> Look</li>
       <li><kbd>Click</kbd> Fire</li>
       <li><kbd>R</kbd> Reload</li>
+      <li><kbd>B</kbd> Buy menu (during buy time)</li>
+      <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Weapons</li>
       <li><kbd>Ctrl</kbd> Crouch</li>
       <li><kbd>Space</kbd> Jump</li>
     </ul>
