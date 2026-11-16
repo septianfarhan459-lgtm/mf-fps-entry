@@ -29,7 +29,7 @@ export function createBots(scene, team, count) {
     scene.add(p.mesh);
     p.wp = 0; p.state = 'patrol'; p.fireCd = 0; p.strafe = Math.random() < 0.5 ? 1 : -1;
     p.reaction = 0.25 + Math.random() * 0.35;
-    p.aimError = 0.09 + Math.random() * 0.12;
+    p.aimError = 0.05 + Math.random() * 0.1; // tuned: tighter base inaccuracy
     p.path = [];
     p.lastSeen = null;
     bots.push(p);
@@ -112,7 +112,10 @@ export function updateBot(bot, dt, target, others, onShot) {
     bot.pos.z += (toT.x) * bot.strafe * BOT_SPEED * 0.55 * dt;
     if (bot.reaction <= 0 && bot.fireCd <= 0 && dist < 50) {
       bot.fireCd = FIRE_CD * (0.85 + Math.random() * 0.4);
-      const hitChance = Math.max(0.12, 0.85 - dist / 70) * (1 - bot.aimError);
+      // lead: moving targets are slightly harder to hit but bots compensate a little
+      const tSpeed = Math.hypot(target.vel ? target.vel.x : 0, target.vel ? target.vel.z : 0);
+      const leadBonus = Math.min(0.15, tSpeed * 0.012);
+      const hitChance = Math.min(0.75, (Math.max(0.12, 0.85 - dist / 70) + leadBonus) * (1 - bot.aimError));
       if (Math.random() < hitChance) {
         const head = Math.random() < 0.12;
         onShot(bot, target, head ? WEAPONS.rifle.dmg * 3 : WEAPONS.rifle.dmg * 0.8);

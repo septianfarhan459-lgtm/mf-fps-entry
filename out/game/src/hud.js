@@ -38,6 +38,7 @@ export function updateHud(hud, state) {
   const o = el('score-orange'); if (o) o.textContent = rounds.score[1];
   const rn = el('hud-round'); if (rn) rn.textContent = `ROUND ${rounds.round}`;
   const wpn = el('hud-weapon'); if (wpn) wpn.textContent = WEAPONS[weapon.type].name;
+  renderScoreboard(hud, state);
   const ch = el('crosshair');
   if (ch) ch.style.transform = `translate(-50%, -50%) scale(${1 + (weapon.currentSpread || 0) * 18})`;
 }
@@ -69,4 +70,24 @@ export function handleBuyClick(hud, player, onEquip) {
     onEquip(key);
     toggleBuyMenu(hud, player);
   });
+}
+
+// scoreboard: hold Tab (or shown automatically at match end); lists kills/deaths
+export function renderScoreboard(hud, state) {
+  const sb = el('scoreboard');
+  if (!sb) return;
+  const show = !!(state.scoreboard || state.rounds.matchOver);
+  sb.hidden = !show;
+  if (!show) return;
+  const rows = state.everyone
+    .slice()
+    .sort((a, b) => (b.kills - b.deaths) - (a.kills - a.deaths))
+    .map((p) => {
+      const name = p === state.player ? 'You' : (p.team === 0 ? 'Blue bot' : 'Orange bot');
+      const cls = p.team === 0 ? 'blue' : 'orange';
+      return `<tr><td class="${cls}">${name}</td><td>${p.kills}</td><td>${p.deaths}</td></tr>`;
+    })
+    .join('');
+  sb.innerHTML = `<h2>SCOREBOARD - ${state.rounds.score[0]} : ${state.rounds.score[1]}</h2>
+    <table><tr><th>Player</th><th>K</th><th>D</th></tr>${rows}</table>`;
 }
