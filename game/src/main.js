@@ -1,4 +1,4 @@
-// main.js: wires the game together - boot, loop, shooting, rounds.
+// main.js: wires the game together - boot, loop, shooting, grenades, pickups, scoreboard, rounds.
 import * as THREE from 'three';
 import { createEngine, TICK } from './engine.js';
 import { initInput, consumeLook, mouse, keys } from './input.js';
@@ -7,7 +7,10 @@ import { createPlayer, updatePlayer, eyePos, damage } from './player.js';
 import { createWeapon, updateWeapon, tryFire, startReload, switchWeapon, WEAPONS, addTracer, updateTracers } from './weapon.js';
 import { createBots, updateBot } from './bots.js';
 import { createRounds, startRound, updateRounds, KILL_REWARD } from './rounds.js';
-import { createHud, updateHud, addFeed, toggleBuyMenu, handleBuyClick } from './hud.js';
+import { createHud, updateHud, addFeed, toggleBuyMenu, handleBuyClick, renderScoreboard } from './hud.js';
+import { createGrenades, throwGrenade, updateGrenades, GRENADE_COUNT } from './grenade.js';
+import { createPickups, updatePickups } from './pickups.js';
+import { unlockAudio, playShot, playFootstep, playReload } from './sfx.js';
 
 const container = document.getElementById('game');
 const engine = createEngine(container);
@@ -30,9 +33,17 @@ const everyone = [player, ...botsBlue, ...botsOrange];
 const weapon = createWeapon();
 const rounds = createRounds();
 const hud = createHud();
+const grenades = createGrenades();
+const pickups = createPickups(scene);
 let kills = 0;
 
 const _eye = new THREE.Vector3(), _dir = new THREE.Vector3(), _ray = new THREE.Raycaster();
+
+function killCredit(killerName, victim, head) {
+  const t = victim.team === TEAM_ORANGE ? 'orange' : 'blue';
+  addFeed(hud, `<b>${killerName}</b> killed <span class="${t}">${t === 'orange' ? 'Orange' : 'Blue'}</span>${head ? ' HEADSHOT' : ''}`);
+  checkRoundEnd();
+}
 
 function shoot() {
   const spec = WEAPONS[weapon.type];
@@ -66,6 +77,7 @@ function shoot() {
   const wallHit = _ray.intersectObjects(scene.children, true).filter((h) => !h.object.parent || !h.object.parent.isGroup)[0];
   const end = best ? best.point : (wallHit ? wallHit.point : _eye.clone().add(_dir.multiplyScalar(120)));
   addTracer(scene, _eye, end);
+  playShot(weapon.type);
   if (best) {
     const falloff = Math.max(0.55, 1 - bestDist / 90);
     const killed = damage(best.other, spec.dmg * falloff, best.head);
@@ -73,8 +85,7 @@ function shoot() {
     if (killed) {
       player.money = Math.min(16000, player.money + KILL_REWARD);
       player.kills++;
-      addFeed(hud, `<b>You</b> killed <span class="${best.other.team === TEAM_ORANGE ? 'orange' : 'blue'}">${best.other.team === TEAM_ORANGE ? 'Orange' : 'Blue'}</span>${best.head ? ' HEADSHOT' : ''}`);
-      checkRoundEnd();
+      killCredit('You', best.other, best.head);
     }
   }
 }
@@ -86,7 +97,11 @@ function botShoot(bot, target, dmg) {
     addTracer(scene, _eye, tmpV.clone().add(new THREE.Vector3((Math.random()-0.5)*0.3, 0, (Math.random()-0.5)*0.3)));
     const killed = damage(target, dmg, false);
     if (killed) {
+      bot.kills++;
       if (target === player) respawnPlayer();
+      const bn = bot.team === TEAM_ORANGE ? 'Orange' : 'Blue';
+      const vt = target.team === TEAM_ORANGE ? 'orange' : 'blue';
+      addFeed(hud, `<b>${bn}</b> killed <span class="${vt}">${vt === 'orange' ? 'Orange' : 'Blue'}</span>`);
       checkRoundEnd();
     }
   }
@@ -126,6 +141,7 @@ function begin() {
 }
 document.getElementById('play').addEventListener('click', () => {
   overlay.hidden = true;
+  unlockAudio();
   rendererCanvas().requestPointerLock();
   startRound(rounds, everyone);
 });
@@ -141,11 +157,22 @@ if (new URLSearchParams(location.search).has('shot')) {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyR') startReload(weapon);
+  if (e.code === 'KeyR') { if (startReload(weapon)) playReload(); }
   if (e.code === 'KeyB' && rounds.phase === 'buy') toggleBuyMenu(hud, player);
   if (e.code === 'Digit1') switchWeapon(weapon, 'rifle');
   if (e.code === 'Digit2') switchWeapon(weapon, 'smg');
   if (e.code === 'Digit3') switchWeapon(weapon, 'sniper');
+  if (e.code === 'KeyG' && player.alive && grenades.held > 0) {
+    eyePos(player, _eye);
+    camera.getWorldDirection(_dir);
+    if (throwGrenade(grenades, scene, _eye, _dir)) {
+      addFeed(hud, `<b>You</b> threw a grenade (${grenades.held} left)`);
+    }
+  }
+  if (e.code === 'Tab') { e.preventDefault(); hud.scoreboard = true; }
+});
+document.addEventListener('keyup', (e) => {
+  if (e.code === 'Tab') hud.scoreboard = false;
 });
 handleBuyClick(hud, player, (key) => { switchWeapon(weapon, key); });
 
@@ -158,14 +185,35 @@ view.callbacks.push((alpha, dt) => {
 
 // fixed-step systems
 let framesAlive = 0;
+let footTimer = 0;
 sim.systems.push((dt, tick) => {
   const look = consumeLook();
   const moving = Math.hypot(player.vel.x, player.vel.z) > 1;
   updatePlayer(player, dt, look);
   updateWeapon(weapon, dt, moving, !player.onGround);
 
+  // footsteps
+  if (player.alive && player.onGround && moving) {
+    footTimer -= dt;
+    if (footTimer <= 0) { playFootstep(!player.crouch); footTimer = player.crouch ? 0.55 : 0.38; }
+  } else footTimer = 0;
+
   if (mouse.fire && player.alive && rounds.phase === 'live' && tryFire(weapon, true)) shoot();
   updateTracers(dt);
+
+  // grenades
+  updateGrenades(grenades, scene, dt, everyone, (victim) => {
+    if (victim === player) { respawnPlayer(); }
+    else {
+      player.money = Math.min(16000, player.money + KILL_REWARD);
+      player.kills++;
+    }
+    killCredit('Your grenade', victim, false);
+  });
+  if (rounds.phase === 'buy' && grenades.held < GRENADE_COUNT) grenades.held = GRENADE_COUNT;
+
+  // ammo pickups
+  updatePickups(pickups, dt, player, weapon);
 
   const enemies = player.team === TEAM_BLUE ? botsOrange : botsBlue;
   const mates = botsBlue;
@@ -177,14 +225,16 @@ sim.systems.push((dt, tick) => {
 
   updateRounds(rounds, dt, everyone, (winner) => {
     addFeed(hud, `<b>${winner === TEAM_BLUE ? 'BLUE' : 'ORANGE'} wins the round</b>`);
+    if (rounds.matchOver) hud.scoreboard = true;
   });
-  if (rounds.phase === 'over' && rounds.timer <= 0) startRound(rounds, everyone);
+  if (rounds.phase === 'over' && rounds.timer <= 0 && !rounds.matchOver) startRound(rounds, everyone);
 });
 
 // HUD per frame
-const hudState = { player, weapon, rounds };
+const hudState = { player, weapon, rounds, everyone, grenades, scoreboard: false };
 view.callbacks.push(() => {
-  updateHud(hud, hudState);
+  hud.scoreboard = hud.scoreboard || !!hudState.scoreboard;
+  updateHud(hud, { ...hudState, scoreboard: hud.scoreboard });
   const copy = document.getElementById('overlay-copy');
   if (copy && rounds.phase === 'over') copy.textContent = rounds.matchOver
     ? `Match over - ${rounds.score[0]} : ${rounds.score[1]} - reload to play again`

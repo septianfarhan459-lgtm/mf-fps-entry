@@ -206,6 +206,26 @@
     text-align: center;
   }
 
+  #scoreboard {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 320px;
+    padding: 20px 24px;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-panel);
+    pointer-events: none;
+  }
+  #scoreboard[hidden] { display: none; }
+  #scoreboard h2 { margin: 0 0 12px; font-size: 16px; font-weight: 500; letter-spacing: -0.01em; }
+  #scoreboard table { width: 100%; border-collapse: collapse; font-family: var(--font-readout); font-size: 13px; }
+  #scoreboard th { text-align: left; color: var(--muted); font-weight: 400; padding: 4px 12px 4px 0; }
+  #scoreboard td { padding: 4px 12px 4px 0; }
+  #scoreboard .blue { color: #6f9fd8; }
+  #scoreboard .orange { color: #d88a6f; }
+
   @media (prefers-reduced-motion: reduce) {
     #hitmarker, #play { transition-duration: 0.01ms; }
   }
@@ -223,6 +243,7 @@
   <div id="topbar"><b id="score-blue">0</b><span id="hud-round">ROUND 1</span><span id="hud-timer">00:10</span><b id="score-orange">0</b></div>
   <ul id="killfeed"></ul>
   <div id="buymenu" hidden></div>
+  <div id="scoreboard" hidden></div>
 </div>
 
 <div id="overlay" class="overlay">
@@ -236,6 +257,8 @@
       <li><kbd>Click</kbd> Fire</li>
       <li><kbd>R</kbd> Reload</li>
       <li><kbd>B</kbd> Buy menu (during buy time)</li>
+      <li><kbd>G</kbd> Throw grenade</li>
+      <li><kbd>Tab</kbd> Scoreboard</li>
       <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Weapons</li>
       <li><kbd>Ctrl</kbd> Crouch</li>
       <li><kbd>Space</kbd> Jump</li>
